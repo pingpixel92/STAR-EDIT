@@ -129,6 +129,8 @@ export interface MediaAsset {
   /** Videos: subject position over time (smart reframe). Photos: single focus point. */
   subject?: SubjectPoint[]
   focus?: { x: number; y: number }
+  /** Browser could not decode this file even after conversion attempts — card shows honest warning. */
+  decodeFailed?: boolean
   createdAt: number
 }
 

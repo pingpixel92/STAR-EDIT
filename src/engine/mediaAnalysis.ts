@@ -1,8 +1,9 @@
 // Local media analysis — thumbnails, dimensions, waveforms, dominant colors, reference-video pacing,
 // subject/saliency tracking (smart reframe for 16:9 → 9:16 etc.)
 import type { GradeId, MediaAsset, ReferenceAnalysis, SubjectPoint } from '../lib/types'
+import { prepareImageFile } from './imageDecode'
 
-export const ACCEPTED = '.mp4,.mov,.webm,.png,.jpg,.jpeg,.gif,.mp3,.wav,.m4a,.ogg,.aac,.flac'
+export const ACCEPTED = '.mp4,.mov,.webm,.png,.jpg,.jpeg,.gif,.webp,.avif,.heic,.heif,.bmp,.tif,.tiff,.mp3,.wav,.m4a,.ogg,.aac,.flac'
 export const ACCEPT_TYPES = ['video/mp4', 'video/quicktime', 'video/webm', 'image/png', 'image/jpeg', 'image/gif', 'audio/mpeg', 'audio/wav', 'audio/x-m4a', 'audio/mp4', 'audio/ogg', 'audio/aac', 'audio/flac']
 
 export function typeOf(file: File): 'image' | 'video' | 'audio' | null {
@@ -10,7 +11,7 @@ export function typeOf(file: File): 'image' | 'video' | 'audio' | null {
   if (file.type.startsWith('video/')) return 'video'
   if (file.type.startsWith('audio/')) return 'audio'
   const ext = file.name.split('.').pop()?.toLowerCase() ?? ''
-  if (['png', 'jpg', 'jpeg', 'gif', 'webp'].includes(ext)) return 'image'
+  if (['png', 'jpg', 'jpeg', 'gif', 'webp', 'avif', 'heic', 'heif', 'bmp', 'tif', 'tiff'].includes(ext)) return 'image'
   if (['mp4', 'mov', 'webm', 'm4v'].includes(ext)) return 'video'
   if (['mp3', 'wav', 'm4a', 'ogg', 'aac', 'flac'].includes(ext)) return 'audio'
   return null
@@ -129,22 +130,17 @@ async function sampleSubjectTrack(v: HTMLVideoElement, duration: number): Promis
 }
 
 export async function analyzeImage(file: Blob): Promise<Partial<MediaAsset>> {
-  const url = URL.createObjectURL(file)
+  // robust pipeline: HEIC-aware sniffing, native → bitmap fallbacks (see imageDecode.ts)
+  const { decoded } = await prepareImageFile(file)
+  const src = decoded.source
+  const thumb = thumbDataUrl(src, decoded.width, decoded.height)
+  const colors = dominantColors(src, decoded.width, decoded.height)
+  let focus: { x: number; y: number } | undefined
   try {
-    const img = new Image()
-    img.src = url
-    await img.decode()
-    const thumb = thumbDataUrl(img, img.naturalWidth, img.naturalHeight)
-    const colors = dominantColors(img, img.naturalWidth, img.naturalHeight)
-    let focus: { x: number; y: number } | undefined
-    try {
-      const s = sampleSaliency(img, img.naturalWidth, img.naturalHeight)
-      focus = { x: s.x, y: s.y }
-    } catch { /* keep center */ }
-    return { width: img.naturalWidth, height: img.naturalHeight, thumb, colors, focus, analyzed: true } as Partial<MediaAsset>
-  } finally {
-    URL.revokeObjectURL(url)
-  }
+    const s = sampleSaliency(src, decoded.width, decoded.height)
+    focus = { x: s.x, y: s.y }
+  } catch { /* keep center */ }
+  return { width: decoded.width, height: decoded.height, thumb, colors, focus, analyzed: true } as Partial<MediaAsset>
 }
 
 export async function analyzeVideo(file: Blob): Promise<Partial<MediaAsset>> {

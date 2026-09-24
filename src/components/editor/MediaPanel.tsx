@@ -1,8 +1,9 @@
 import { useEffect, useRef, useState } from 'react'
-import { Upload, Trash2, Music, Film, Image as ImageIcon, Mic2, Plus, BookOpen, Zap, Waves, Captions } from 'lucide-react'
+import { Upload, Trash2, Music, Film, Image as ImageIcon, Mic2, Plus, BookOpen, Zap, Waves, Captions, AlertTriangle } from 'lucide-react'
 import { useEditor } from '../../lib/store'
 import * as db from '../../lib/db'
 import { ACCEPTED, analyzeAudio, analyzeImage, analyzeReference, analyzeVideo, typeOf } from '../../engine/mediaAnalysis'
+import { prepareImageFile } from '../../engine/imageDecode'
 import { detectBeats } from '../../engine/beats'
 import type { MediaAsset } from '../../lib/types'
 import { formatBytes, formatTime, uid } from '../../lib/utils'
@@ -12,6 +13,7 @@ import { runAutoLyricsFlow } from '../../ai/runCommand'
 
 export function useMediaImport() {
   const store = useEditor()
+  const { t } = useI18n()
   const [progressName, setProgressName] = useState<string | null>(null)
 
   const importFiles = async (files: FileList | File[] | null, asReference = false) => {
@@ -20,12 +22,11 @@ export function useMediaImport() {
     for (const file of Array.from(files)) {
       const type = typeOf(file)
       if (!type) {
-        alert(`Unsupported file: ${file.name}`)
+        alert(t('ed.unsupportedFile').replace('{name}', file.name))
         continue
       }
       setProgressName(file.name)
       const id = uid('med')
-      await db.putBlob(id, file)
       const meta: MediaAsset = {
         id, projectId, name: file.name, type,
         mimeType: file.type || '', size: file.size,
@@ -33,21 +34,46 @@ export function useMediaImport() {
         createdAt: Date.now(),
       }
       store.setAssetAnalyzed(id, true)
-      try {
-        if (type === 'image') Object.assign(meta, await analyzeImage(file))
-        else if (type === 'video') {
+      // Images: robust decode pipeline — iPhone HEIC gets converted to JPEG in-browser.
+      // The stored blob is always one the browser can render later (preview, export, reload).
+      let storedBlob: Blob = file
+      if (type === 'image') {
+        try {
+          const prepared = await prepareImageFile(file)
+          storedBlob = prepared.blob
+          if (prepared.converted) {
+            meta.name = file.name.replace(/\.(heic|heif)$/i, '') + '.jpg'
+            meta.mimeType = 'image/jpeg'
+            meta.size = prepared.blob.size
+          }
+          Object.assign(meta, await analyzeImage(prepared.blob))
+        } catch {
+          meta.decodeFailed = true
+        }
+      } else if (type === 'video') {
+        try {
           Object.assign(meta, await analyzeVideo(file))
           if (asReference && meta.duration && meta.duration > 1) {
             const ra = await analyzeReference(file, meta.duration)
             if (ra) meta.analysis = ra
           }
-        } else Object.assign(meta, await analyzeAudio(file))
-      } catch {
-        // analysis failed — asset still usable; never fake results
+          // browser can't decode this video (e.g. HEVC .mov on Firefox) — honest flag
+          if (!meta.width && !meta.duration) meta.decodeFailed = true
+        } catch {
+          meta.decodeFailed = true
+        }
+      } else {
+        try {
+          Object.assign(meta, await analyzeAudio(file))
+        } catch {
+          // analysis failed — asset still usable; never fake results
+        }
       }
+      await db.putBlob(id, storedBlob)
       await db.putMedia(meta)
-      useEditor.getState().addAssets([meta], new Map([[id, file]]))
+      useEditor.getState().addAssets([meta], new Map([[id, storedBlob]]))
       store.setAssetAnalyzed(id, false)
+      if (meta.decodeFailed) alert(t('ed.decodeFailed').replace('{name}', file.name))
       setProgressName(null)
 
       // auto beat detection for music
@@ -157,7 +183,7 @@ export default function MediaPanel() {
           >
             <BookOpen size={12} /> {t('ed.addRef')}
           </button>
-          <p className="mt-2 text-[9.5px] leading-relaxed text-zinc-600">MP4 · MOV · WebM · PNG · JPG · GIF · MP3 · WAV · M4A</p>
+          <p className="mt-2 text-[9.5px] leading-relaxed text-zinc-600">MP4 · MOV · WebM · PNG · JPG · HEIC · WebP · GIF · MP3 · WAV · M4A</p>
           <input ref={inputRef} type="file" multiple accept={ACCEPTED} className="hidden" onChange={(e) => { void importFiles(e.target.files); e.currentTarget.value = '' }} />
           <input ref={refInputRef} type="file" accept="video/mp4,video/webm,video/quicktime,.mp4,.mov,.webm" className="hidden" onChange={(e) => { void importFiles(e.target.files, true); e.currentTarget.value = '' }} />
           {progressName && (
@@ -256,6 +282,11 @@ export default function MediaPanel() {
                     {a.duration ? formatTime(a.duration) : a.type.toUpperCase()}
                   </span>
                   {a.role === 'reference' && <span className="chip !px-1 !py-0 !text-[8.5px] !border-amber-500/40 !text-amber-300 !bg-black/70">REF</span>}
+                  {a.decodeFailed && (
+                    <span className="chip !px-1 !py-0 !text-[8.5px] !border-red-500/50 !text-red-300 !bg-black/80" title={t('ed.decodeFailedTitle')}>
+                      <AlertTriangle size={8} /> {t('ed.decodeFailedChip')}
+                    </span>
+                  )}
                 </div>
                 {store.analyzing[a.id] && (
                   <div className="absolute inset-0 flex items-center justify-center bg-black/60"><Spinner size={16} /></div>
