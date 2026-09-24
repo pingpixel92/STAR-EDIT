@@ -6,15 +6,6 @@ import { runAICommand } from '../../ai/runCommand'
 import { formatTime } from '../../lib/utils'
 import { useI18n } from '../../lib/i18n'
 
-const EXAMPLES = [
-  'Make a 15 second cinematic football edit, sync every cut to the beat',
-  'Turn these photos into a 20 second emotional reel with slow zooms',
-  'Make it darker and more dramatic, add strong zooms on the drop',
-  'Add bold white captions and a title saying "STAR EDIT"',
-  'Keep only the best 20 seconds and make it 9:16',
-  'Sync the cuts harder to the beat',
-]
-
 export default function PreviewPanel({ compact = false }: { compact?: boolean }) {
   const { t } = useI18n()
   const store = useEditor()
@@ -26,6 +17,7 @@ export default function PreviewPanel({ compact = false }: { compact?: boolean })
   const [listening, setListening] = useState(false)
   const [hasSTT, setHasSTT] = useState(false)
   const recRef = useRef<{ stop: () => void } | null>(null)
+  const EXAMPLES = [t('ed.ex1'), t('ed.ex2'), t('ed.ex3')]
 
   useEffect(() => {
     controller?.setCanvas(canvasRef.current)
@@ -135,7 +127,7 @@ export default function PreviewPanel({ compact = false }: { compact?: boolean })
         <button className="btn-accent !h-10 !w-10 !rounded-full !p-0" onClick={() => store.setPlaying(!store.playing)} aria-label={store.playing ? 'Pause' : 'Play'}>
           {store.playing ? <Pause size={16} /> : <Play size={16} className="translate-x-[1px]" />}
         </button>
-        <span className="min-w-[86px] text-center text-[12px] font-semibold tabular-nums text-zinc-400">
+        <span dir="ltr" className="min-w-[86px] text-center text-[12px] font-semibold tabular-nums text-zinc-400">
           {formatTime(store.time, true)} / {formatTime(p.duration)}
         </span>
       </div>

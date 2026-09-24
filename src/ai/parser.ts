@@ -142,7 +142,7 @@ export function parseCommand(input: string, ctx: Ctx): ParseResult | null {
 
   // ---- zoom / movement ----
   if (has(/zoom|ken ?burns|زوم|کن ?برن/, s)) {
-    const strong = has(/dramatic|hard|strong|قیف|قوی|دINGTON/, s) ? 0.9 : 0.6
+    const strong = has(/dramatic|hard|strong|heavy|شدید|قوی|سنگین/, s) ? 0.9 : 0.6
     actions.push({ type: 'addZooms', intensity: strong })
     matched.push('add zooms')
   }

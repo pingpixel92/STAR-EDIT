@@ -1,10 +1,11 @@
 import { useEffect, useState } from 'react'
-import { Loader2, Trash2, ShieldCheck, Keyboard, Info } from 'lucide-react'
-import { Modal, Field, Select, Toggle, Spinner } from '../ui'
+import { Trash2, ShieldCheck, Keyboard, Info, BookOpen } from 'lucide-react'
+import { Modal, Field, Toggle, Spinner } from '../ui'
 import { useI18n, LANGS, type Lang } from '../../lib/i18n'
 import { kvGet, kvSet, storageEstimate } from '../../lib/db'
 import { testProvider, DEFAULT_AI, type AIConfig } from '../../ai/provider'
 import { formatBytes } from '../../lib/utils'
+import { navigate } from '../../App'
 import type { AspectId } from '../../lib/types'
 
 export default function SettingsDialog({ open, onClose }: { open: boolean; onClose: () => void }) {
@@ -127,6 +128,15 @@ export default function SettingsDialog({ open, onClose }: { open: boolean; onClo
             <span><kbd className="chip">←/→</kbd> step frame</span>
             <span><kbd className="chip">⇧+←/→</kbd> step second</span>
           </div>
+          <button
+            className="btn-ghost mt-1 w-full !py-2 !text-[12px]"
+            onClick={() => {
+              onClose()
+              navigate('/guide')
+            }}
+          >
+            <BookOpen size={13} /> {t('nav.guide')}
+          </button>
         </section>
 
         {/* privacy */}
@@ -138,9 +148,8 @@ export default function SettingsDialog({ open, onClose }: { open: boolean; onClo
         </section>
 
         <p className="text-center text-[10.5px] text-zinc-600">
-          STAR EDIT v1.0 — free, browser-side AI video editing. Built with React, Canvas, Web Audio & MediaRecorder.
+          STAR EDIT v1.1 — free, browser-side AI video editing. Built with React, Canvas, Web Audio & MediaRecorder.
         </p>
-        {false && <Loader2 size={1} />}
       </div>
     </Modal>
   )

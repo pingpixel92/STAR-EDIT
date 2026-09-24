@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { Download, Film, X } from 'lucide-react'
-import { Modal, Progress, Select, Spinner } from '../ui'
+import { Modal, Progress, Select } from '../ui'
 import { useI18n } from '../../lib/i18n'
 import { useEditor } from '../../lib/store'
 import { useEditorCtx } from '../../pages/EditorPage'
@@ -102,7 +102,7 @@ export default function ExportDialog({ open, onClose }: { open: boolean; onClose
         <div className="space-y-4 text-center">
           <Film size={40} className="mx-auto text-star-400" />
           <h3 className="text-lg font-extrabold">{t('ex.done')}</h3>
-          <p className="text-[12px] text-zinc-500">
+          <p dir="ltr" className="text-[12px] text-zinc-500">
             {formatBytes(result.size)} · {width}×{resH} · {result.ext.toUpperCase()} — file downloaded automatically
           </p>
           <video src={result.url} controls className="mx-auto max-h-[300px] rounded-xl border border-white/10" />
@@ -178,9 +178,7 @@ export default function ExportDialog({ open, onClose }: { open: boolean; onClose
           />
           <div className="rounded-xl border border-white/8 bg-white/[0.03] p-3 text-[11.5px] leading-relaxed text-zinc-400">
             <p>{t('ex.realtime')}</p>
-            <p className="mt-1.5">
-              Timeline: <b className="text-zinc-200">{formatTime(p?.duration ?? 0)}</b> → export takes about the same time. MP4 appears when the browser supports it; otherwise high-quality WebM.
-            </p>
+            <p className="mt-1.5">{t('ex.info').replace('{d}', formatTime(p?.duration ?? 0))}</p>
           </div>
           <button className="btn-accent w-full !py-3" disabled={!formats.length} onClick={() => void start()}>
             <Download size={16} /> {t('ex.start')}
@@ -190,5 +188,3 @@ export default function ExportDialog({ open, onClose }: { open: boolean; onClose
     </Modal>
   )
 }
-
-void Spinner

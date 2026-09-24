@@ -7,6 +7,7 @@ import { detectBeats } from '../../engine/beats'
 import type { MediaAsset } from '../../lib/types'
 import { formatBytes, formatTime, uid } from '../../lib/utils'
 import { Spinner } from '../ui'
+import { useI18n } from '../../lib/i18n'
 
 export function useMediaImport() {
   const store = useEditor()
@@ -68,6 +69,7 @@ export function useMediaImport() {
 
 export default function MediaPanel() {
   const store = useEditor()
+  const { t } = useI18n()
   const { importFiles, progressName } = useMediaImport()
   const [drag, setDrag] = useState(false)
   const inputRef = useRef<HTMLInputElement>(null)
@@ -141,17 +143,17 @@ export default function MediaPanel() {
           }}
         >
           <Upload size={22} className="text-star-400" />
-          <p className="mt-2 text-[13px] font-semibold text-zinc-200">Drop your media here</p>
-          <p className="text-[11px] text-zinc-500">or choose files</p>
+          <p className="mt-2 text-[13px] font-semibold text-zinc-200">{t('ed.dropTitle')}</p>
+          <p className="text-[11px] text-zinc-500">{t('ed.dropOr')}</p>
           <button className="btn-ghost mt-3 !px-3 !py-1.5 !text-[12px]" onClick={() => inputRef.current?.click()}>
-            <Plus size={13} /> Import from device
+            <Plus size={13} /> {t('ed.import')}
           </button>
           <button
             className="btn-ghost mt-1.5 !px-3 !py-1 !text-[11px] !text-zinc-400"
             onClick={() => refInputRef.current?.click()}
-            title="Reference video: used only for pacing/style analysis"
+            title={t('ed.referenceHint')}
           >
-            <BookOpen size={12} /> Add reference video
+            <BookOpen size={12} /> {t('ed.addRef')}
           </button>
           <p className="mt-2 text-[9.5px] leading-relaxed text-zinc-600">MP4 · MOV · WebM · PNG · JPG · GIF · MP3 · WAV · M4A</p>
           <input ref={inputRef} type="file" multiple accept={ACCEPTED} className="hidden" onChange={(e) => { void importFiles(e.target.files); e.currentTarget.value = '' }} />
@@ -159,7 +161,7 @@ export default function MediaPanel() {
           {progressName && (
             <div className="absolute inset-0 flex flex-col items-center justify-center gap-2 rounded-xl bg-ink-950/85 backdrop-blur-sm">
               <Spinner size={20} />
-              <span className="max-w-[80%] truncate text-[11px] text-zinc-400">Analyzing {progressName}…</span>
+              <span className="max-w-[80%] truncate text-[11px] text-zinc-400">{t('ed.analyzing')} {progressName}</span>
             </div>
           )}
         </div>
@@ -169,7 +171,7 @@ export default function MediaPanel() {
       {audioAsset && (
         <div className="mx-3 mb-2 rounded-xl border border-white/8 bg-white/[0.03] p-3">
           <div className="flex items-center gap-2 text-[12px] font-bold text-zinc-200">
-            <Waves size={13} className="text-star-400" /> Beat map
+            <Waves size={13} className="text-star-400" /> {t('ed.beatMap')}
             {store.analyzing[`${audioAsset.id}:beats`] && <Spinner size={12} />}
           </div>
           {beat ? (
@@ -179,7 +181,7 @@ export default function MediaPanel() {
                 <span>{beat.beats.length} beats</span>
                 <span>conf {Math.round(beat.confidence * 100)}%</span>
               </div>
-              {beat.approximate && <p className="mt-1 text-[10px] text-amber-400/80">Beat detection is approximate.</p>}
+              {beat.approximate && <p className="mt-1 text-[10px] text-amber-400/80">{t('ed.beatApprox')}</p>}
               <div className="mt-2 flex h-8 items-end gap-[1.5px] overflow-hidden rounded bg-black/30 px-1 py-1">
                 {(audioAsset.peaks ?? []).slice(0, 120).map((v, i) => (
                   <span
@@ -191,7 +193,7 @@ export default function MediaPanel() {
               </div>
             </>
           ) : (
-            <p className="mt-1 text-[11px] text-zinc-500">No beat analysis yet.</p>
+            <p className="mt-1 text-[11px] text-zinc-500">{t('ed.noBeats')}</p>
           )}
         </div>
       )}
@@ -200,7 +202,7 @@ export default function MediaPanel() {
       {store.assets.some((a) => a.type === 'image') && (
         <div className="px-3 pb-2">
           <button className="btn-ghost w-full !py-1.5 !text-[12px]" onClick={addAllPhotos}>
-            <Zap size={13} className="text-star-400" /> Add all photos to timeline
+            <Zap size={13} className="text-star-400" /> {t('ed.addAllPhotos')}
           </button>
         </div>
       )}
@@ -209,7 +211,7 @@ export default function MediaPanel() {
       <div className="min-h-0 flex-1 overflow-y-auto px-3 pb-3">
         {store.assets.length === 0 ? (
           <p className="mt-6 px-2 text-center text-[12px] leading-relaxed text-zinc-600">
-            No media yet. Upload photos and music, then describe your edit to STAR AI.
+            {t('ed.empty')}
           </p>
         ) : (
           <div className="grid grid-cols-2 gap-2">
@@ -259,7 +261,7 @@ export default function MediaPanel() {
         )}
         {store.assets.length > 0 && (
           <p className="mt-3 text-center text-[10px] text-zinc-600">
-            Total {formatBytes(store.assets.reduce((n, a) => n + a.size, 0))} — stored locally, never uploaded
+            {t('ed.total')} {formatBytes(store.assets.reduce((n, a) => n + a.size, 0))} — {t('ed.storedLocal')}
           </p>
         )}
       </div>

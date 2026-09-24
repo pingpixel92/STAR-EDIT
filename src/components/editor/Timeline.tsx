@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
-import { Magnet, ZoomIn, ZoomOut, Scissors, Trash2, Copy } from 'lucide-react'
+import { Magnet, ZoomIn, ZoomOut, Scissors, Trash2, Copy, Film, Music2, Type } from 'lucide-react'
 import { useEditor } from '../../lib/store'
 import { useEditorCtx } from '../../pages/EditorPage'
 import { formatTime, uid } from '../../lib/utils'
@@ -110,10 +110,7 @@ export default function Timeline({ splitAtPlayhead }: { splitAtPlayhead: () => v
       if (dragRef.current) {
         dragRef.current = null
         setDragging(false)
-        // one history entry per drag
-        const s = useEditor.getState()
-        const project = s.project
-        if (project) s.mutate(() => {}, { history: true })
+        // history snapshot was captured at drag start (startDrag)
       }
     }
     window.addEventListener('pointermove', move)
@@ -128,6 +125,8 @@ export default function Timeline({ splitAtPlayhead }: { splitAtPlayhead: () => v
   const startDrag = (e: React.PointerEvent, clip: Clip, track: Track, mode: DragMode) => {
     e.stopPropagation()
     store.select([clip.id])
+    // capture the PRE-drag state once, so undo restores it correctly
+    store.commit()
     dragRef.current = {
       clipId: clip.id,
       trackId: track.id,
@@ -149,7 +148,8 @@ export default function Timeline({ splitAtPlayhead }: { splitAtPlayhead: () => v
   if (!p) return null
 
   const tracks = p.tracks
-  const trackIcon = (kind: Track['kind']) => (kind === 'video' ? '🎬' : kind === 'audio' ? '🎵' : '🅣')
+  const trackIcon = (kind: Track['kind']) =>
+    kind === 'video' ? <Film size={11} className="text-zinc-500" /> : kind === 'audio' ? <Music2 size={11} className="text-sky-400/80" /> : <Type size={11} className="text-star-300/80" />
 
   return (
     <div className="flex h-full flex-col">
@@ -189,8 +189,8 @@ export default function Timeline({ splitAtPlayhead }: { splitAtPlayhead: () => v
         </div>
       </div>
 
-      {/* scroll area */}
-      <div ref={scrollRef} className="relative min-h-0 flex-1 overflow-auto">
+      {/* scroll area — forced LTR so the timeline geometry stays correct in RTL languages */}
+      <div ref={scrollRef} dir="ltr" className="relative min-h-0 flex-1 overflow-auto">
         <div className="relative" style={{ width }}>
           {/* ruler */}
           <div
@@ -218,10 +218,10 @@ export default function Timeline({ splitAtPlayhead }: { splitAtPlayhead: () => v
             {tracks.map((tr) => (
               <div key={tr.id} className="flex border-b border-white/4">
                 <div className="sticky start-0 z-10 flex w-24 shrink-0 flex-col justify-center bg-ink-900/95 px-2 py-1.5 backdrop-blur">
-                  <span className="text-[11px] font-semibold text-zinc-300">
+                  <span className="flex items-center gap-1.5 text-[11px] font-semibold text-zinc-300">
                     {trackIcon(tr.kind)} {tr.name}
                   </span>
-                  <span className="text-[9px] text-zinc-600">{tr.clips.length} clips</span>
+                  <span className="ps-[17px] text-[9px] text-zinc-600">{tr.clips.length} clips</span>
                 </div>
                 <div
                   className="relative h-14 flex-1"

@@ -1,7 +1,7 @@
 import { createContext, useContext, useEffect, useMemo, useRef, useState } from 'react'
 import {
   Undo2, Redo2, Download, Settings, History, ChevronLeft, Save, Loader2, Check,
-  Scissors, Copy, Trash2, Image as ImageIcon, Play as PlayIcon,
+  Scissors, Copy, Trash2, Image as ImageIcon, Play as PlayIcon, BookOpen, HelpCircle,
 } from 'lucide-react'
 import { LogoWord } from '../components/Logo'
 import { navigate } from '../App'
@@ -17,6 +17,7 @@ import InspectorPanel from '../components/editor/InspectorPanel'
 import ExportDialog from '../components/editor/ExportDialog'
 import SettingsDialog from '../components/editor/SettingsDialog'
 import VersionsDialog from '../components/editor/VersionsDialog'
+import Tour from '../components/editor/Tour'
 
 const Ctx = createContext<{ controller: PlaybackController | null }>({ controller: null })
 export const useEditorCtx = () => useContext(Ctx)
@@ -142,12 +143,15 @@ export default function EditorPage({ projectId }: { projectId: string }) {
             tr.clips.push(...dups)
           }
         })
-      } else if (e.key.toLowerCase() === 's') {
+      } else if (e.key.toLowerCase() === 's' && !mod) {
+        // plain S splits; Ctrl/Cmd+S is left to the browser
         splitAtPlayhead()
       } else if (e.key === 'ArrowLeft') {
-        s.setTime(Math.max(0, s.time - (e.shiftKey ? 1 : 1 / 30)))
+        e.preventDefault()
+        controller.seek(Math.max(0, s.time - (e.shiftKey ? 1 : 1 / 30)))
       } else if (e.key === 'ArrowRight') {
-        s.setTime(Math.min(s.project.duration, s.time + (e.shiftKey ? 1 : 1 / 30)))
+        e.preventDefault()
+        controller.seek(Math.min(s.project.duration, s.time + (e.shiftKey ? 1 : 1 / 30)))
       }
     }
     window.addEventListener('keydown', fn)
@@ -230,6 +234,22 @@ export default function EditorPage({ projectId }: { projectId: string }) {
             )}
           </span>
           <div className="mx-auto" />
+          <button
+            className="btn-icon hidden sm:inline-flex"
+            onClick={() => window.dispatchEvent(new CustomEvent('star-tour'))}
+            title={t('ed.guide')}
+            aria-label={t('ed.guide')}
+          >
+            <HelpCircle size={15} />
+          </button>
+          <button
+            className="btn-icon hidden md:inline-flex"
+            onClick={() => navigate('/guide')}
+            title={t('nav.guide')}
+            aria-label={t('nav.guide')}
+          >
+            <BookOpen size={15} />
+          </button>
           <button className="btn-icon" disabled={!canUndo} onClick={() => store.undo()} title={t('ed.undo')} aria-label={t('ed.undo')}><Undo2 size={15} /></button>
           <button className="btn-icon" disabled={!canRedo} onClick={() => store.redo()} title={t('ed.redo')} aria-label={t('ed.redo')}><Redo2 size={15} /></button>
           <span className="mx-1 h-5 w-px bg-white/10" />
@@ -324,6 +344,7 @@ export default function EditorPage({ projectId }: { projectId: string }) {
         <ExportDialog open={exportOpen} onClose={() => setExportOpen(false)} />
         <SettingsDialog open={settingsOpen} onClose={() => setSettingsOpen(false)} />
         <VersionsDialog open={versionsOpen} onClose={() => setVersionsOpen(false)} />
+        <Tour />
       </div>
     </Ctx.Provider>
   )

@@ -4,13 +4,15 @@ import { MotionConfig } from 'framer-motion'
 import Landing from './pages/Landing'
 import Projects from './pages/Projects'
 import EditorPage from './pages/EditorPage'
+import Guide from './pages/Guide'
 
-type Route = { name: 'landing' } | { name: 'projects' } | { name: 'editor'; id: string }
+type Route = { name: 'landing' } | { name: 'projects' } | { name: 'editor'; id: string } | { name: 'guide' }
 
 function parseHash(): Route {
   const raw = window.location.hash.replace(/^#\/?/, '').split('?')[0]
   if (raw.startsWith('editor/')) return { name: 'editor', id: raw.slice(7) }
   if (raw === 'projects') return { name: 'projects' }
+  if (raw === 'guide') return { name: 'guide' }
   return { name: 'landing' }
 }
 
@@ -26,6 +28,7 @@ function Router() {
   }, [])
   if (route.name === 'editor') return <EditorPage projectId={route.id} />
   if (route.name === 'projects') return <Projects />
+  if (route.name === 'guide') return <Guide />
   return <Landing />
 }
 

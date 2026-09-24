@@ -1,5 +1,5 @@
 // Small shared UI kit
-import React, { useEffect } from 'react'
+import React, { useEffect, useRef } from 'react'
 import { X } from 'lucide-react'
 import { cn } from '../lib/utils'
 
@@ -46,9 +46,20 @@ export function Slider({
 }: {
   value: number; min: number; max: number; step: number
   onChange: (v: number) => void
+  /** called ONCE before the first change of a gesture — captures the pre-change undo snapshot */
   onCommit?: () => void
   label: string; format?: (v: number) => string
 }) {
+  const armed = useRef(false)
+  const arm = () => {
+    if (!armed.current) {
+      armed.current = true
+      onCommit?.()
+    }
+  }
+  const disarm = () => {
+    armed.current = false
+  }
   return (
     <div className="space-y-1">
       <div className="flex items-center justify-between text-[11px]">
@@ -58,8 +69,12 @@ export function Slider({
       <input
         type="range" min={min} max={max} step={step} value={value}
         onChange={(e) => onChange(parseFloat(e.target.value))}
-        onPointerUp={onCommit}
-        onKeyUp={onCommit}
+        onPointerDown={arm}
+        onPointerUp={disarm}
+        onKeyDown={(e) => {
+          if (['ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown', 'Home', 'End', 'PageUp', 'PageDown'].includes(e.key)) arm()
+        }}
+        onBlur={disarm}
         aria-label={label}
       />
     </div>

@@ -7,14 +7,7 @@ import type { AIConfig } from '../../ai/provider'
 import { uid } from '../../lib/utils'
 import { useI18n } from '../../lib/i18n'
 
-const QUICK = [
-  'Make a 15s cinematic football edit with beat sync',
-  'Make it darker + dramatic zooms',
-  'Sync the cuts to the beat',
-  'Add captions "STAR EDIT"',
-  'Keep only the best 20 seconds',
-  'Create a 9:16 version',
-]
+const QUICK = ['qc.1', 'qc.2', 'qc.3', 'qc.4', 'qc.5', 'qc.6']
 
 export default function AIPanel() {
   const { t } = useI18n()
@@ -41,7 +34,7 @@ export default function AIPanel() {
     if (!assets.length && !useEditor.getState().project?.tracks.some((tr) => tr.clips.length)) {
       useEditor.getState().addChat({
         id: uid('m'), role: 'assistant', at: Date.now(),
-        text: 'Your timeline is empty and no media is uploaded yet. Add photos / videos / music in the Media panel first — then I can build a real edit.',
+        text: t('ai.empty'),
       })
       return
     }
@@ -63,7 +56,7 @@ export default function AIPanel() {
         ) : (
           <span className="chip !border-star-500/30 !text-star-300"><Cpu size={10} /> {t('ai.localBadge')}</span>
         )}
-        <span className="ms-auto text-[10px]">real operations only</span>
+        <span className="ms-auto text-[10px]">{t('ai.realOps')}</span>
       </div>
 
       {/* messages */}
@@ -105,8 +98,8 @@ export default function AIPanel() {
       {/* quick chips */}
       <div className="flex gap-1.5 overflow-x-auto px-3 pb-2 [scrollbar-width:none]">
         {QUICK.map((q) => (
-          <button key={q} className="chip shrink-0 whitespace-nowrap hover:border-star-500/50 hover:text-white" onClick={() => void send(q)}>
-            {q.length > 34 ? q.slice(0, 34) + '…' : q}
+          <button key={q} className="chip shrink-0 whitespace-nowrap hover:border-star-500/50 hover:text-white" onClick={() => void send(t(q))} title={t(q)}>
+            {t(q).length > 34 ? t(q).slice(0, 34) + '…' : t(q)}
           </button>
         ))}
       </div>
@@ -133,7 +126,7 @@ export default function AIPanel() {
           </button>
         </div>
         <p className="mt-1.5 flex items-center gap-1 text-[10px] text-zinc-600">
-          <AlertTriangle size={9} /> Every reported operation is actually applied — with undo & version snapshots.
+          <AlertTriangle size={9} /> {t('ai.honest')}
         </p>
       </div>
     </div>

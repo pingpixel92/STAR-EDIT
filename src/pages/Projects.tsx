@@ -176,7 +176,7 @@ export default function Projects() {
           </div>
         )}
         <div className="mt-10 flex items-center gap-2 text-[12px] text-zinc-500">
-          <HardDrive size={13} /> Projects are stored locally in your browser (IndexedDB).
+          <HardDrive size={13} /> {t('prj.stored')}
         </div>
       </main>
 
@@ -242,8 +242,8 @@ export default function Projects() {
 
       {/* Delete confirm */}
       <Modal open={!!confirmDel} onClose={() => setConfirmDel(null)} title={t('projects.delete')}>
-        <p className="text-sm text-zinc-300">
-          “{confirmDel?.name}” — {t('st.confirmClear') === 'x' ? '' : ''}{t('common.confirm')}?
+        <p className="text-sm leading-relaxed text-zinc-300">
+          “{confirmDel?.name}” — {t('del.msg')}
         </p>
         <div className="mt-5 flex gap-2">
           <button className="btn-ghost flex-1 !border-red-500/40 !text-red-400" onClick={async () => { if (confirmDel) await remove(confirmDel); setConfirmDel(null) }}>
