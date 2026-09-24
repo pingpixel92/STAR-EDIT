@@ -283,7 +283,7 @@ export default function EditorPage({ projectId }: { projectId: string }) {
             <div className="flex min-h-0 flex-1 flex-col items-center justify-center bg-[radial-gradient(60rem_30rem_at_50%_-10%,rgba(124,58,237,0.08),transparent)] p-4">
               <PreviewPanel />
             </div>
-            <div className="h-[292px] shrink-0 border-t border-white/6 bg-ink-900/50">
+            <div className="h-[clamp(170px,34vh,292px)] shrink-0 border-t border-white/6 bg-ink-900/50">
               <Timeline splitAtPlayhead={splitAtPlayhead} />
             </div>
           </main>

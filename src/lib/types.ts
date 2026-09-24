@@ -10,6 +10,7 @@ export type GradeId =
 export type EffectType =
   | 'vignette' | 'shake' | 'glow' | 'rgbSplit' | 'brightness'
   | 'contrast' | 'saturation' | 'hue' | 'blur' | 'grain'
+  | 'letterbox' | 'lightLeak'
 export type MotionType =
   | 'none' | 'zoomIn' | 'zoomOut' | 'panLeft' | 'panRight'
   | 'panUp' | 'panDown' | 'kenburns' | 'punch'
@@ -59,6 +60,10 @@ export interface Clip {
   opacity: number
   text?: TextProps
   color?: string
+  /** Aspect conversion: 'crop' = smart focal crop, 'blur' = blurred pad (CapCut style) */
+  fill?: 'crop' | 'blur'
+  /** Manual focal point override (0..1). When absent, the analyzed subject is used. */
+  focal?: { x: number; y: number }
 }
 
 export interface Track {
@@ -68,6 +73,13 @@ export interface Track {
   clips: Clip[]
   muted: boolean
   hidden: boolean
+}
+
+export interface SubjectPoint {
+  t: number // seconds in source
+  x: number // 0..1
+  y: number // 0..1
+  v: number // saliency/motion strength 0..1
 }
 
 export interface BeatMap {
@@ -114,6 +126,9 @@ export interface MediaAsset {
   colors?: string[]
   role?: 'media' | 'reference'
   analysis?: ReferenceAnalysis
+  /** Videos: subject position over time (smart reframe). Photos: single focus point. */
+  subject?: SubjectPoint[]
+  focus?: { x: number; y: number }
   createdAt: number
 }
 
@@ -155,9 +170,9 @@ export type PlanAction =
   | { type: 'trimStart'; seconds: number }
   | { type: 'keepBest'; seconds: number }
   | { type: 'removeAudio' }
-  | { type: 'addCaptions'; text?: string; style?: string }
-  | { type: 'addTitle'; text: string }
-  | { type: 'addLowerThird'; text: string }
+  | { type: 'addCaptions'; text?: string; style?: string; font?: string }
+  | { type: 'addTitle'; text: string; font?: string }
+  | { type: 'addLowerThird'; text: string; font?: string }
   | { type: 'addCounter'; from: number; to: number; label?: string }
   | { type: 'setTransition'; style: TransitionStyle; duration?: number }
   | { type: 'removeClip'; index: number }
@@ -166,6 +181,13 @@ export type PlanAction =
   | { type: 'setVolume'; volume: number }
   | { type: 'fadeOut'; seconds: number }
   | { type: 'applyReferencePacing' }
+  // --- v1.2 professional additions ---
+  | { type: 'fitToMusic' }
+  | { type: 'autoReframe'; fill?: 'crop' | 'blur' }
+  | { type: 'speedRamp'; slow?: number; fast?: number }
+  | { type: 'addOutro'; text?: string }
+  | { type: 'addEffect'; effect: EffectType; intensity?: number }
+  | { type: 'autoLyrics'; language?: string; quality?: 'fast' | 'best' }
 
 export interface EditPlan {
   actions: PlanAction[]
@@ -191,6 +213,8 @@ export const EFFECT_LABELS: Record<EffectType, string> = {
   hue: 'Hue Shift',
   blur: 'Blur',
   grain: 'Grain',
+  letterbox: 'Cinematic Bars',
+  lightLeak: 'Light Leak',
 }
 
 export const GRADES: GradeId[] = [

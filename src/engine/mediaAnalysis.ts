@@ -1,5 +1,6 @@
-// Local media analysis — thumbnails, dimensions, waveforms, dominant colors, reference-video pacing
-import type { GradeId, MediaAsset, ReferenceAnalysis } from '../lib/types'
+// Local media analysis — thumbnails, dimensions, waveforms, dominant colors, reference-video pacing,
+// subject/saliency tracking (smart reframe for 16:9 → 9:16 etc.)
+import type { GradeId, MediaAsset, ReferenceAnalysis, SubjectPoint } from '../lib/types'
 
 export const ACCEPTED = '.mp4,.mov,.webm,.png,.jpg,.jpeg,.gif,.mp3,.wav,.m4a,.ogg,.aac,.flac'
 export const ACCEPT_TYPES = ['video/mp4', 'video/quicktime', 'video/webm', 'image/png', 'image/jpeg', 'image/gif', 'audio/mpeg', 'audio/wav', 'audio/x-m4a', 'audio/mp4', 'audio/ogg', 'audio/aac', 'audio/flac']
@@ -58,6 +59,75 @@ export function dominantColors(source: CanvasImageSource, sw: number, sh: number
   }
 }
 
+// ---------- Subject / saliency (smart reframe) ----------
+// Gradient-magnitude weighted centroid = where the visual detail (subject) lives.
+interface SalFrame { x: number; y: number; v: number; gray: Float32Array }
+
+function saliencyFromGray(gray: Float32Array, S: number): { x: number; y: number; v: number } {
+  let sum = 0, cx = 0, cy = 0, maxG = 0.0001
+  const mag = new Float32Array(S * S)
+  for (let y = 1; y < S - 1; y++) {
+    for (let x = 1; x < S - 1; x++) {
+      const i = y * S + x
+      const gx = gray[i + 1] - gray[i - 1]
+      const gy = gray[i + S] - gray[i - S]
+      const g = Math.sqrt(gx * gx + gy * gy)
+      mag[i] = g
+      if (g > maxG) maxG = g
+      sum += g
+      cx += g * x
+      cy += g * y
+    }
+  }
+  if (sum < 1) return { x: 0.5, y: 0.45, v: 0 }
+  return { x: clamp01(cx / sum / (S - 1)), y: clamp01(cy / sum / (S - 1)), v: clamp01((sum / ((S - 2) * (S - 2))) / maxG / 2) }
+}
+
+function clamp01(v: number): number {
+  return Math.min(1, Math.max(0, v))
+}
+
+function sampleSaliency(source: CanvasImageSource, sw: number, sh: number): SalFrame {
+  const S = 48
+  const { ctx } = canvas2d(S, S)
+  ctx.drawImage(source, 0, 0, S, S)
+  const d = ctx.getImageData(0, 0, S, S).data
+  const gray = new Float32Array(S * S)
+  for (let p = 0; p < S * S; p++) gray[p] = 0.299 * d[p * 4] + 0.587 * d[p * 4 + 1] + 0.114 * d[p * 4 + 2]
+  const s = saliencyFromGray(gray, S)
+  return { ...s, gray }
+}
+
+/** Track the subject across a video: K seeked samples → centroid per sample + motion strength. */
+async function sampleSubjectTrack(v: HTMLVideoElement, duration: number): Promise<SubjectPoint[]> {
+  if (!duration || duration < 0.8 || !v.videoWidth) return []
+  const S = 48
+  const K = Math.round(Math.min(18, Math.max(8, duration * 1.2)))
+  const frames: SalFrame[] = []
+  for (let i = 0; i < K; i++) {
+    const t = (duration * (i + 0.5)) / K
+    await new Promise<void>((res) => {
+      v.onseeked = () => res()
+      v.currentTime = Math.min(Math.max(0.03, t), Math.max(0.03, duration - 0.03))
+      setTimeout(res, 3500)
+    })
+    frames.push(sampleSaliency(v, v.videoWidth, v.videoHeight))
+  }
+  const pts: SubjectPoint[] = []
+  for (let i = 0; i < frames.length; i++) {
+    const t = (duration * (i + 0.5)) / K
+    // motion strength: frame diff vs previous sample (first sample uses its own saliency)
+    let v = frames[i].v
+    if (i > 0) {
+      let diff = 0
+      for (let p = 0; p < S * S; p++) diff += Math.abs(frames[i].gray[p] - frames[i - 1].gray[p])
+      v = clamp01((diff / (S * S * 255)) * 6 + frames[i].v * 0.3)
+    }
+    pts.push({ t: Math.round(t * 100) / 100, x: frames[i].x, y: frames[i].y, v: Math.round(v * 100) / 100 })
+  }
+  return pts
+}
+
 export async function analyzeImage(file: Blob): Promise<Partial<MediaAsset>> {
   const url = URL.createObjectURL(file)
   try {
@@ -66,7 +136,12 @@ export async function analyzeImage(file: Blob): Promise<Partial<MediaAsset>> {
     await img.decode()
     const thumb = thumbDataUrl(img, img.naturalWidth, img.naturalHeight)
     const colors = dominantColors(img, img.naturalWidth, img.naturalHeight)
-    return { width: img.naturalWidth, height: img.naturalHeight, thumb, colors, analyzed: true } as Partial<MediaAsset>
+    let focus: { x: number; y: number } | undefined
+    try {
+      const s = sampleSaliency(img, img.naturalWidth, img.naturalHeight)
+      focus = { x: s.x, y: s.y }
+    } catch { /* keep center */ }
+    return { width: img.naturalWidth, height: img.naturalHeight, thumb, colors, focus, analyzed: true } as Partial<MediaAsset>
   } finally {
     URL.revokeObjectURL(url)
   }
@@ -94,7 +169,12 @@ export async function analyzeVideo(file: Blob): Promise<Partial<MediaAsset>> {
     })
     const thumb = thumbDataUrl(v, v.videoWidth, v.videoHeight)
     const colors = dominantColors(v, v.videoWidth, v.videoHeight)
-    return { width: v.videoWidth, height: v.videoHeight, duration, thumb, colors } as Partial<MediaAsset>
+    // subject track for smart reframe — sampled across the timeline
+    let subject: SubjectPoint[] | undefined
+    try {
+      subject = await sampleSubjectTrack(v, duration)
+    } catch { /* reframe falls back to center */ }
+    return { width: v.videoWidth, height: v.videoHeight, duration, thumb, colors, subject } as Partial<MediaAsset>
   } finally {
     v.removeAttribute('src')
     URL.revokeObjectURL(url)

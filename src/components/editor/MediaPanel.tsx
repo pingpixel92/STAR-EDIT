@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
-import { Upload, Trash2, Music, Film, Image as ImageIcon, Mic2, Plus, BookOpen, Zap, Waves } from 'lucide-react'
+import { Upload, Trash2, Music, Film, Image as ImageIcon, Mic2, Plus, BookOpen, Zap, Waves, Captions } from 'lucide-react'
 import { useEditor } from '../../lib/store'
 import * as db from '../../lib/db'
 import { ACCEPTED, analyzeAudio, analyzeImage, analyzeReference, analyzeVideo, typeOf } from '../../engine/mediaAnalysis'
@@ -8,6 +8,7 @@ import type { MediaAsset } from '../../lib/types'
 import { formatBytes, formatTime, uid } from '../../lib/utils'
 import { Spinner } from '../ui'
 import { useI18n } from '../../lib/i18n'
+import { runAutoLyricsFlow } from '../../ai/runCommand'
 
 export function useMediaImport() {
   const store = useEditor()
@@ -126,7 +127,8 @@ export default function MediaPanel() {
   }
 
   const beat = store.project?.beatMap
-  const audioAsset = store.assets.find((a) => a.type === 'audio')
+  const audioAsset = store.assets.find((a) => a.type === 'audio' && a.id === beat?.mediaId) ?? store.assets.find((a) => a.type === 'audio')
+  const [lyricsBusy, setLyricsBusy] = useState(false)
 
   return (
     <div className="flex min-h-0 flex-1 flex-col">
@@ -191,6 +193,21 @@ export default function MediaPanel() {
                   />
                 ))}
               </div>
+              <button
+                className="btn-ghost mt-2 w-full !py-1.5 !text-[11.5px]"
+                disabled={lyricsBusy}
+                onClick={async () => {
+                  setLyricsBusy(true)
+                  try {
+                    await runAutoLyricsFlow(undefined, 'fast', audioAsset.id)
+                  } finally {
+                    setLyricsBusy(false)
+                  }
+                }}
+              >
+                <Captions size={12} className="text-star-400" /> {lyricsBusy ? t('ed.lyricsBusy') : t('ed.lyrics')}
+              </button>
+              <p className="mt-1 text-[9.5px] leading-relaxed text-zinc-600">{t('ed.lyricsHint')}</p>
             </>
           ) : (
             <p className="mt-1 text-[11px] text-zinc-500">{t('ed.noBeats')}</p>

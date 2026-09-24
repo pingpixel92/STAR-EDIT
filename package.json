@@ -1,7 +1,7 @@
 {
   "name": "star-edit",
   "private": true,
-  "version": "1.0.0",
+  "version": "1.2.0",
   "type": "module",
   "description": "STAR EDIT — You describe the edit. STAR EDIT creates it. Free AI-powered, browser-side video editing.",
   "scripts": {

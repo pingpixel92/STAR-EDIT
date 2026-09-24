@@ -19,13 +19,14 @@ const ALLOWED = new Set([
   'setDuration', 'setAspect', 'buildPhotoEdit', 'setStyle', 'beatSync', 'addZooms', 'setColorGrade',
   'setSpeed', 'trimStart', 'keepBest', 'removeAudio', 'addCaptions', 'addTitle', 'addLowerThird',
   'addCounter', 'setTransition', 'removeClip', 'addMovement', 'reduceEffects', 'setVolume', 'fadeOut',
-  'applyReferencePacing',
+  'applyReferencePacing', 'fitToMusic', 'autoReframe', 'speedRamp', 'addOutro', 'addEffect', 'autoLyrics',
 ])
 
 const ASPECTS = new Set(['9:16', '16:9', '1:1', '4:5', '21:9'])
 const GRADES = new Set(['none', 'cinematic', 'orangeTeal', 'warm', 'cold', 'dark', 'bw', 'vintage', 'vibrant', 'muted'])
 const STYLES = new Set(['cinematic', 'fast', 'hype', 'emotional', 'minimal', 'dark', 'energetic', 'vlog', 'sports', 'travel', 'gaming', 'fashion', 'luxury', 'beatsync'])
 const TRANSITIONS = new Set(['none', 'dissolve', 'flash', 'whip', 'slide', 'blurIn'])
+const EFFECTS = new Set(['vignette', 'shake', 'glow', 'rgbSplit', 'brightness', 'contrast', 'saturation', 'hue', 'blur', 'grain', 'letterbox', 'lightLeak'])
 
 /** Validate & sanitize an LLM-produced plan. Unknown/broken actions are dropped. */
 export function validatePlan(raw: unknown): EditPlan | null {
@@ -80,11 +81,11 @@ export function validatePlan(raw: unknown): EditPlan | null {
         clean.push({ type: 'removeAudio' })
         break
       case 'addCaptions':
-        clean.push({ type: 'addCaptions', text: typeof o.text === 'string' ? o.text.slice(0, 400) : undefined })
+        clean.push({ type: 'addCaptions', text: typeof o.text === 'string' ? o.text.slice(0, 400) : undefined, font: typeof o.font === 'string' ? o.font.slice(0, 40) : undefined })
         break
       case 'addTitle':
       case 'addLowerThird':
-        if (typeof o.text === 'string' && o.text.trim()) clean.push({ type, text: o.text.slice(0, 48) } as PlanAction)
+        if (typeof o.text === 'string' && o.text.trim()) clean.push({ type, text: o.text.slice(0, 48), font: typeof o.font === 'string' ? o.font.slice(0, 40) : undefined } as PlanAction)
         break
       case 'addCounter':
         clean.push({ type: 'addCounter', from: 0, to: clampNum(o.to, 1, 100000, 10) } as PlanAction)
@@ -107,6 +108,25 @@ export function validatePlan(raw: unknown): EditPlan | null {
         break
       case 'applyReferencePacing':
         clean.push({ type: 'applyReferencePacing' })
+        break
+      case 'fitToMusic':
+        clean.push({ type: 'fitToMusic' })
+        break
+      case 'autoReframe':
+        clean.push({ type: 'autoReframe', fill: o.fill === 'blur' ? 'blur' : 'crop' })
+        break
+      case 'speedRamp':
+        clean.push({ type: 'speedRamp', slow: clampNum(o.slow, 0.3, 0.9, 0.5), fast: clampNum(o.fast, 1.1, 2.5, 1.5) })
+        break
+      case 'addOutro':
+        clean.push({ type: 'addOutro', text: typeof o.text === 'string' ? o.text.slice(0, 48) : undefined })
+        break
+      case 'addEffect':
+        if (typeof o.effect === 'string' && EFFECTS.has(o.effect))
+          clean.push({ type: 'addEffect', effect: o.effect as 'vignette', intensity: clampNum(o.intensity, 0.05, 1, 0.5) })
+        break
+      case 'autoLyrics':
+        clean.push({ type: 'autoLyrics', quality: o.quality === 'best' ? 'best' : 'fast', language: typeof o.language === 'string' ? o.language.slice(0, 12) : undefined })
         break
     }
   }
@@ -133,8 +153,11 @@ Available action types (use exact fields):
 {"type":"addCounter","to":number} {"type":"setTransition","style":"dissolve|flash|whip|slide|blurIn","duration":n}
 {"type":"removeClip","index":0-based} {"type":"addMovement","intensity":0-1} {"type":"reduceEffects"}
 {"type":"setVolume","volume":0-1.5} {"type":"fadeOut","seconds":n} {"type":"applyReferencePacing"}
+{"type":"fitToMusic"} {"type":"autoReframe","fill":"crop"|"blur"} {"type":"speedRamp","slow":0.3-0.9,"fast":1.1-2.5}
+{"type":"addOutro","text":string} {"type":"addEffect","effect":"vignette|shake|glow|rgbSplit|brightness|contrast|saturation|hue|blur|grain|letterbox|lightLeak","intensity":0-1}
+{"type":"autoLyrics","quality":"fast"|"best"}
 Project context (JSON): ${projectContext}
-Prefer buildPhotoEdit when the user describes a new edit and media exists. Never invent other action types.`
+Prefer buildPhotoEdit when the user describes a new edit and media exists. For vertical aspect changes, add autoReframe after setAspect. Never invent other action types.`
 
   const res = await fetch(`${cfg.baseUrl.replace(/\/$/, '')}/chat/completions`, {
     method: 'POST',

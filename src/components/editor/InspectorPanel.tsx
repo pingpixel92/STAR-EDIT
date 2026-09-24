@@ -3,8 +3,9 @@ import { useEditor } from '../../lib/store'
 import { Field, Select, Slider, Toggle } from '../ui'
 import { EFFECTS_OPTS, GRADE_OPTS, MOTION_OPTS, TRANSITION_OPTS } from './inspectorOptions'
 import type { Clip, EffectSpec, EffectType } from '../../lib/types'
-import { useEffect } from 'react'
+import { useEffect, useRef } from 'react'
 import { useI18n } from '../../lib/i18n'
+import { allFontFamilies, registerCustomFont } from '../../lib/fonts'
 
 export default function InspectorPanel() {
   const { t } = useI18n()
@@ -12,6 +13,8 @@ export default function InspectorPanel() {
   const sel = store.selection
   const p = store.project
   const clip: Clip | undefined = p?.tracks.flatMap((tr) => tr.clips).find((c) => c.id === sel[0])
+  const fontInputRef = useRef<HTMLInputElement>(null)
+  const FONTS = allFontFamilies()
 
   useEffect(() => {
     // redraw preview when inspector edits land
@@ -160,6 +163,23 @@ export default function InspectorPanel() {
         </section>
       )}
 
+      {/* reframe (aspect conversion) */}
+      {isVisual && (
+        <section className="space-y-3 rounded-xl border border-white/8 bg-white/[0.02] p-3">
+          <h4 className="text-[10px] font-bold uppercase tracking-wider text-zinc-500">{t('ins.reframe')}</h4>
+          <Select
+            label={t('ins.fill')} value={clip.fill ?? 'crop'}
+            options={[{ value: 'crop', label: t('ins.fillCrop') }, { value: 'blur', label: t('ins.fillBlur') }]}
+            onChange={(v) => { commit(); patch((c) => (c.fill = v as 'crop' | 'blur')) }}
+          />
+          <div className="grid grid-cols-2 gap-2">
+            <Slider label={t('ins.focalX')} min={0.05} max={0.95} step={0.01} value={clip.focal?.x ?? 0.5} onChange={(v) => patch((c) => (c.focal = { x: v, y: c.focal?.y ?? 0.5 }))} onCommit={commit} />
+            <Slider label={t('ins.focalY')} min={0.05} max={0.95} step={0.01} value={clip.focal?.y ?? 0.5} onChange={(v) => patch((c) => (c.focal = { x: c.focal?.x ?? 0.5, y: v }))} onCommit={commit} />
+          </div>
+          <p className="text-[10px] leading-relaxed text-zinc-600">{t('ins.reframeHint')}</p>
+        </section>
+      )}
+
       {/* audio */}
       {isAudible && (
         <section className="space-y-3 rounded-xl border border-white/8 bg-white/[0.02] p-3">
@@ -232,6 +252,38 @@ export default function InspectorPanel() {
               { value: 'pop', label: 'Pop' }, { value: 'typewriter', label: 'Typewriter' }, { value: 'karaoke', label: 'Karaoke (word-by-word)' },
             ]}
             onChange={(v) => { commit(); patch((c) => { if (c.text) c.text.anim = v }) }}
+          />
+          <Select
+            label={t('ins.font')} value={clip.text.font}
+            options={[
+              ...(FONTS.some((f) => f.family === clip.text?.font) || !clip.text
+                ? []
+                : [{ value: clip.text.font, label: clip.text.font }]),
+              ...FONTS.map((f) => ({ value: f.family, label: f.group === 'Custom' ? `★ ${f.family}` : f.family })),
+              { value: '__upload', label: `+ ${t('ins.uploadFont')}` },
+            ]}
+            onChange={(v) => {
+              if (v === '__upload') {
+                fontInputRef.current?.click()
+                return
+              }
+              commit()
+              patch((c) => { if (c.text) c.text.font = v })
+            }}
+          />
+          <input
+            ref={fontInputRef} type="file" accept=".ttf,.otf,.woff,.woff2" className="hidden"
+            onChange={async (e) => {
+              const f = e.target.files?.[0]
+              e.currentTarget.value = ''
+              if (!f) return
+              const name = f.name.replace(/\.[^.]+$/, '')
+              try {
+                await registerCustomFont(name, await f.arrayBuffer())
+                commit()
+                patch((c) => { if (c.text) c.text.font = name })
+              } catch { /* invalid font file — ignore honestly */ }
+            }}
           />
           <div className="flex items-center justify-between">
             <span className="text-[11px] text-zinc-400">{t('ins.stroke')}</span>

@@ -1,7 +1,9 @@
 // Canvas frame renderer — real effects, transitions, Ken Burns motion, text & captions
+// v1.2: smart reframe (focal crop + blur pad), letterbox, light leak, lazy font loading
 import type { Clip, EffectSpec, Project, TextProps, Track } from '../lib/types'
 import type { MediaAsset } from '../lib/types'
 import { clamp, easeIO, easeO } from '../lib/utils'
+import { ensureFont } from '../lib/fonts'
 
 export interface AssetView {
   meta: MediaAsset
@@ -82,6 +84,37 @@ interface DrawOpts {
   skipOverlays?: boolean
 }
 
+const fontsReady = new Set<string>()
+
+/** Lazily load the real font, then ask for a redraw so canvas glyphs update. */
+function requestFont(family: string) {
+  if (!family || fontsReady.has(family)) return
+  fontsReady.add(family)
+  void ensureFont(family).then((ok) => {
+    if (ok) window.dispatchEvent(new CustomEvent('star-redraw'))
+    else fontsReady.delete(family)
+  })
+}
+
+/** Focal point for smart reframe: manual override > analyzed subject track > photo focus > center. */
+function focalAt(clip: Clip, t: number, env: RenderEnv): { x: number; y: number } {
+  if (clip.focal) return clip.focal
+  const meta: MediaAsset | undefined = clip.mediaId ? env.assets.get(clip.mediaId)?.meta : undefined
+  if (meta?.subject && meta.subject.length > 0 && clip.kind === 'video') {
+    const src = clip.inPoint + (t - clip.start) * clip.speed
+    const pts = meta.subject
+    let i = 0
+    while (i < pts.length - 1 && pts[i + 1].t < src) i++
+    const a = pts[i]
+    const b = pts[Math.min(i + 1, pts.length - 1)]
+    const span = Math.max(b.t - a.t, 0.001)
+    const p = clamp((src - a.t) / span, 0, 1)
+    return { x: clamp(a.x + (b.x - a.x) * p, 0, 1), y: clamp(a.y + (b.y - a.y) * p, 0, 1) }
+  }
+  if (meta?.focus) return meta.focus
+  return { x: 0.5, y: 0.5 }
+}
+
 function starPath(ctx: CanvasRenderingContext2D, cx: number, cy: number, r: number) {
   ctx.beginPath()
   for (let i = 0; i < 10; i++) {
@@ -120,9 +153,32 @@ function drawMediaSource(
     const sw = av.img ? av.img.naturalWidth : av.el!.videoWidth
     const sh = av.img ? av.img.naturalHeight : av.el!.videoHeight
     if (sw && sh) {
-      const cover = Math.max(W / sw, H / sh) * 1.03
-      const dw = sw * cover, dh = sh * cover
-      try { ctx.drawImage(src, -dw / 2, -dh / 2, dw, dh) } catch { /* frame not ready */ }
+      if (clip.fill === 'blur') {
+        // CapCut-style blurred pad: cover+blur backdrop, contain-fit foreground biased to focal
+        const fp = focalAt(clip, localT, env)
+        const cov = Math.max(W / sw, H / sh) * 1.12
+        try {
+          ctx.save()
+          ctx.filter = `${clipFilter(clip, 24 + (o.blur ?? 0))} brightness(0.55) saturate(1.1)`
+          ctx.drawImage(src, -(sw * cov) / 2, -(sh * cov) / 2, sw * cov, sh * cov)
+          ctx.restore()
+        } catch { /* frame not ready */ }
+        const con = Math.min(W / sw, H / sh)
+        const dw2 = sw * con, dh2 = sh * con
+        const roomX = Math.max(0, (W - dw2) / 2), roomY = Math.max(0, (H - dh2) / 2)
+        const fx = clamp(W / 2 - fp.x * dw2, -roomX, roomX)
+        const fy = clamp(H / 2 - fp.y * dh2, -roomY, roomY)
+        try { ctx.drawImage(src, -dw2 / 2 + fx, -dh2 / 2 + fy, dw2, dh2) } catch { /* noop */ }
+      } else {
+        // focal-biased cover crop — keeps the subject in frame when converting aspect
+        const fp = focalAt(clip, localT, env)
+        const cov = Math.max(W / sw, H / sh) * 1.03
+        const dw = sw * cov, dh = sh * cov
+        const roomX = Math.max(0, (dw - W) / 2), roomY = Math.max(0, (dh - H) / 2)
+        const ox = clamp(W / 2 - fp.x * dw, -roomX, roomX)
+        const oy = clamp(H / 2 - fp.y * dh, -roomY, roomY)
+        try { ctx.drawImage(src, -dw / 2 + ox, -dh / 2 + oy, dw, dh) } catch { /* frame not ready */ }
+      }
     }
   } else {
     // placeholder surface
@@ -177,6 +233,28 @@ function vignette(ctx: CanvasRenderingContext2D, W: number, H: number, intensity
   ctx.fillRect(0, 0, W, H)
 }
 
+function letterbox(ctx: CanvasRenderingContext2D, W: number, H: number, intensity: number) {
+  const bar = H * (0.035 + 0.085 * clamp(intensity, 0, 1))
+  ctx.fillStyle = '#000000'
+  ctx.fillRect(0, 0, W, bar)
+  ctx.fillRect(0, H - bar, W, bar)
+}
+
+function lightLeak(ctx: CanvasRenderingContext2D, W: number, H: number, intensity: number, t: number) {
+  const a = 0.14 + 0.3 * clamp(intensity, 0, 1)
+  const x = W * (0.72 + 0.07 * Math.sin(t * 0.45))
+  const y = H * (0.24 + 0.05 * Math.cos(t * 0.33))
+  const g = ctx.createRadialGradient(x, y, 0, x, y, W * 0.58)
+  g.addColorStop(0, `rgba(255,166,88,${a})`)
+  g.addColorStop(0.45, `rgba(255,105,140,${a * 0.42})`)
+  g.addColorStop(1, 'rgba(255,105,140,0)')
+  ctx.save()
+  ctx.globalCompositeOperation = 'screen'
+  ctx.fillStyle = g
+  ctx.fillRect(0, 0, W, H)
+  ctx.restore()
+}
+
 function grain(ctx: CanvasRenderingContext2D, W: number, H: number, intensity: number, t: number) {
   ctx.save()
   ctx.globalAlpha = 0.05 * intensity
@@ -196,6 +274,7 @@ function grain(ctx: CanvasRenderingContext2D, W: number, H: number, intensity: n
 function drawTextClip(ctx: CanvasRenderingContext2D, W: number, H: number, clip: Clip, t: number) {
   const tp: TextProps | undefined = clip.text
   if (!tp) return
+  if (tp.font) requestFont(tp.font)
   const p = clamp((t - clip.start) / Math.max(clip.duration, 0.001), 0, 1)
   let content = tp.content
   if (tp.countTo != null) {
@@ -315,6 +394,10 @@ function drawClipFull(ctx: CanvasRenderingContext2D, W: number, H: number, clip:
     if (vg) vignette(ctx, W, H, vg.intensity)
     const gr = clip.effects.find((e) => e.type === 'grain')
     if (gr) grain(ctx, W, H, gr.intensity, t)
+    const lb = clip.effects.find((e) => e.type === 'letterbox')
+    if (lb) letterbox(ctx, W, H, lb.intensity)
+    const lk = clip.effects.find((e) => e.type === 'lightLeak')
+    if (lk) lightLeak(ctx, W, H, lk.intensity, t)
   }
 }
 

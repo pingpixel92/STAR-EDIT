@@ -74,21 +74,50 @@ export async function detectBeats(blob: Blob): Promise<Omit<BeatMap, 'mediaId'> 
   // fold into 80..160 range
   while (bpm < 80) bpm *= 2
   while (bpm > 160) bpm /= 2
-  // phase alignment: choose grid offset among first onsets maximizing flux hits
+  // octave validation: compare grid score at bpm/2, bpm, bpm*2 (kept in 60..190) and keep the strongest
+  const gridScore = (candidateBpm: number) => {
+    const period = 60 / candidateBpm
+    let score = 0
+    for (let t = 0; t < buf.duration; t += period) {
+      const fi = Math.round(t / 0.01)
+      if (fi >= 0 && fi < frames) score += sm[fi]
+    }
+    return score / (buf.duration / period) // normalized per grid point
+  }
+  const candidates = [bpm / 2, bpm, bpm * 2].filter((b) => b >= 60 && b <= 190)
+  let bestCand = bpm, bestCandScore = -1
+  for (const c of candidates) {
+    const s = gridScore(c)
+    if (s > bestCandScore) { bestCandScore = s; bestCand = c }
+  }
+  bpm = bestCand
+  // phase alignment: fine grid search over one full period (10 ms steps), scored by onset flux
   const beatSec = 60 / bpm
   let bestOffset = 0, bestHits = -1
-  const cand = onsets.slice(0, 24)
-  for (const o of cand) {
+  for (let o = 0; o < beatSec; o += 0.01) {
     let hits = 0
     for (let t = o; t < buf.duration; t += beatSec) {
       const fi = Math.round(t / 0.01)
-      if (fi < frames) hits += sm[fi]
+      if (fi >= 0 && fi < frames) hits += sm[fi]
     }
-    if (hits > bestHits) {
-      bestHits = hits
-      bestOffset = o % beatSec
+    if (hits > bestHits) { bestHits = hits; bestOffset = o }
+  }
+  // refine phase with ±30 ms window around strong onsets (sub-frame precision)
+  let refined = bestOffset
+  let refinedScore = -1
+  for (const o0 of onsets) {
+    const phase = o0 % beatSec
+    for (let d = -0.03; d <= 0.03; d += 0.005) {
+      const o = ((phase + d) % beatSec + beatSec) % beatSec
+      let hits = 0
+      for (let t = o; t < buf.duration; t += beatSec) {
+        const fi = Math.round(t / 0.01)
+        if (fi >= 0 && fi < frames) hits += sm[fi]
+      }
+      if (hits > refinedScore) { refinedScore = hits; refined = o }
     }
   }
+  bestOffset = refined
   const beats: number[] = []
   for (let t = bestOffset; t < buf.duration - 0.05; t += beatSec) beats.push(Math.round(t * 1000) / 1000)
   // confidence: share of beats that have an onset within 80 ms

@@ -7,7 +7,7 @@ import type { AIConfig } from '../../ai/provider'
 import { uid } from '../../lib/utils'
 import { useI18n } from '../../lib/i18n'
 
-const QUICK = ['qc.1', 'qc.2', 'qc.3', 'qc.4', 'qc.5', 'qc.6']
+const QUICK = ['qc.1', 'qc.2', 'qc.3', 'qc.4', 'qc.5', 'qc.6', 'qc.7', 'qc.8', 'qc.9']
 
 export default function AIPanel() {
   const { t } = useI18n()
